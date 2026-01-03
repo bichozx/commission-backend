@@ -1,16 +1,12 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import express, { Request, Response } from 'express';
 
 import { AppModule } from '../src/app.module';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import express from 'express';
 
-let cachedServer: any;
+let cachedServer: express.Express | null = null;
 
 async function bootstrapServer() {
   if (cachedServer) return cachedServer;
@@ -21,7 +17,7 @@ async function bootstrapServer() {
   const app = await NestFactory.create(AppModule, adapter);
 
   app.enableCors({
-    origin: process.env.FRONTEND_URL || '*',
+    origin: process.env.FRONTEND_URL ?? '*',
     credentials: true,
   });
 
@@ -44,12 +40,12 @@ async function bootstrapServer() {
   SwaggerModule.setup('api/docs', app, document);
 
   await app.init();
-
   cachedServer = server;
+
   return server;
 }
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: Request, res: Response) {
   const server = await bootstrapServer();
   server(req, res);
 }
