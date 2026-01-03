@@ -24,43 +24,27 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 
 export const getDatabaseConfig = (
-  configService: ConfigService,
+  config: ConfigService,
 ): TypeOrmModuleOptions => {
-  const isProduction = configService.get('NODE_ENV') === 'production';
-  const databaseUrl = configService.get<string>('DATABASE_URL');
+  const databaseUrl = config.get<string>('DATABASE_URL');
 
-  if (isProduction) {
-    if (!databaseUrl) {
-      throw new Error('DATABASE_URL is not defined');
-    }
-
-    console.log('🚀 Using PostgreSQL on Supabase (Production)');
-
-    return {
-      type: 'postgres',
-      url: databaseUrl,
-      ssl: {
-        rejectUnauthorized: false,
-      },
-      autoLoadEntities: true,
-      synchronize: false,
-      logging: ['error'],
-    };
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL is not defined');
   }
 
-  // 💻 DESARROLLO LOCAL
-  console.log('💻 Using PostgreSQL local (Development)');
+  console.log('🚀 Using Supabase PostgreSQL');
 
   return {
     type: 'postgres',
-    host: configService.get('DB_HOST', 'localhost'),
-    port: Number(configService.get('DB_PORT', 5432)),
-    username: configService.get('DB_USERNAME', 'postgres'),
-    password: configService.get('DB_PASSWORD'),
-    database: configService.get('DB_NAME', 'commissions_db'),
+    url: databaseUrl,
     autoLoadEntities: true,
-    synchronize: true,
-    logging: true,
-    ssl: false,
+    synchronize: false, // ❌ NUNCA en Supabase
+    logging: ['error', 'warn'],
+    ssl: true,
+    extra: {
+      ssl: {
+        rejectUnauthorized: false,
+      },
+    },
   };
 };
