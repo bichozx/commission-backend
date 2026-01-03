@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 // import { ConfigService } from '@nestjs/config';
 // import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 
@@ -28,44 +27,40 @@ export const getDatabaseConfig = (
   configService: ConfigService,
 ): TypeOrmModuleOptions => {
   const isProduction = configService.get('NODE_ENV') === 'production';
-  const databaseUrl = configService.get('DATABASE_URL');
+  const databaseUrl = configService.get<string>('DATABASE_URL');
 
-  // ✅ POSTGRESQL EN SUPABASE (PRODUCCIÓN)
-  if (isProduction && databaseUrl) {
+  if (isProduction) {
+    if (!databaseUrl) {
+      throw new Error('DATABASE_URL is not defined');
+    }
+
     console.log('🚀 Using PostgreSQL on Supabase (Production)');
 
     return {
       type: 'postgres',
       url: databaseUrl,
-      ssl: true,
-      extra: {
-        ssl: {
-          rejectUnauthorized: false,
-        },
+      ssl: {
+        rejectUnauthorized: false,
       },
-      entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-      synchronize: false, // ⚠️ IMPORTANTE: false en producción
-      logging: ['error', 'warn'],
-      // Configuración optimizada para Vercel
-      poolSize: 10,
-      connectTimeoutMS: 10000,
-      migrationsRun: true,
+      autoLoadEntities: true,
+      synchronize: false,
+      logging: ['error'],
     };
   }
 
-  // ✅ POSTGRESQL LOCAL (DESARROLLO)
+  // 💻 DESARROLLO LOCAL
   console.log('💻 Using PostgreSQL local (Development)');
 
   return {
     type: 'postgres',
     host: configService.get('DB_HOST', 'localhost'),
-    port: configService.get('DB_PORT', 5432),
+    port: Number(configService.get('DB_PORT', 5432)),
     username: configService.get('DB_USERNAME', 'postgres'),
-    password: configService.get('DB_PASSWORD', 'Danger4587'),
+    password: configService.get('DB_PASSWORD'),
     database: configService.get('DB_NAME', 'commissions_db'),
-    entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-    synchronize: configService.get('NODE_ENV') === 'development',
-    logging: configService.get('NODE_ENV') === 'development',
+    autoLoadEntities: true,
+    synchronize: true,
+    logging: true,
     ssl: false,
   };
 };
