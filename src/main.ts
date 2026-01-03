@@ -105,13 +105,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
 
   if (process.env.NODE_ENV !== 'production') {
-    SwaggerModule.setup('api/docs', app, document, {
-      customCssUrl: 'https://unpkg.com/swagger-ui-dist@5/swagger-ui.css',
-      customJs: [
-        'https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js',
-        'https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js',
-      ],
-    });
+    SwaggerModule.setup('api/docs', app, document);
   }
 
   const port = process.env.PORT || 3001;
