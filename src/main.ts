@@ -1,16 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-
-import * as swaggerUi from 'swagger-ui-dist';
-
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 import { AppModule } from './app.module';
 import { NestFactory } from '@nestjs/core';
-import { join } from 'path';
-
-//import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 
 // async function bootstrap() {
 //   const app = await NestFactory.create(AppModule);
@@ -127,26 +119,45 @@ import { join } from 'path';
 
 // bootstrap();
 
+/* main.ts */
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Configurar CORS
+  app.enableCors({
+    origin: process.env.FRONTEND_URL || '*', // Permitir cualquier origen si no hay variable
+    credentials: true,
+  });
+
+  // Validación global
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
+
+  // Configuración de Swagger
   const config = new DocumentBuilder()
-    .setTitle('My API')
+    .setTitle('Commission System API')
+    .setDescription('Multi-level affiliate commission management system')
     .setVersion('1.0')
-    .addBearerAuth()
+    .addBearerAuth() // JWT Bearer
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
 
-  SwaggerModule.setup('api/docs', app, document, {
-    customCssUrl: join(swaggerUi.getAbsoluteFSPath(), 'swagger-ui.css'),
-    customJs: [
-      join(swaggerUi.getAbsoluteFSPath(), 'swagger-ui-bundle.js'),
-      join(swaggerUi.getAbsoluteFSPath(), 'swagger-ui-standalone-preset.js'),
-    ],
-  });
+  // Configurar Swagger en /api/docs, funciona en dev y prod
+  SwaggerModule.setup('api/docs', app, document);
 
-  await app.listen(3001);
+  // Puerto dinámico para Render
+  const port = process.env.PORT ? parseInt(process.env.PORT) : 3001;
+  await app.listen(port);
+
+  console.log(`🚀 Server running on port ${port}`);
+  console.log(`📚 Swagger docs available at http://localhost:${port}/api/docs`);
 }
 
 bootstrap();
