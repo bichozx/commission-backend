@@ -38,14 +38,36 @@ export interface HierarchyLevelInfo {
   totalCommissionsFromYou: number;
 }
 
+// export interface CommissionHierarchyResponse {
+//   current: {
+//     id: string;
+//     name: string;
+//     totalEarned: number;
+//     level: number;
+//   };
+//   level1?: HierarchyLevelInfo;
+//   level2?: HierarchyLevelInfo;
+//   level3?: HierarchyLevelInfo;
+// }
+
+export interface CommissionHierarchyNode {
+  id: string;
+  name: string;
+  email?: string;
+
+  level: number; // ✅ REAL desde BD
+  parentId: string | null;
+
+  // Solo current
+  totalEarned?: number;
+
+  // Solo uplines
+  commissionPercentage?: number;
+  totalEarnedFromYou?: number;
+  totalCommissionsFromYou?: number;
+}
+
 export interface CommissionHierarchyResponse {
-  current: {
-    id: string;
-    name: string;
-    totalEarned: number;
-    level: number;
-  };
-  level1?: HierarchyLevelInfo;
-  level2?: HierarchyLevelInfo;
-  level3?: HierarchyLevelInfo;
+  current: CommissionHierarchyNode;
+  uplines: CommissionHierarchyNode[];
 }

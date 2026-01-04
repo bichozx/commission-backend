@@ -13,6 +13,7 @@ import {
   AffiliateStatus,
 } from '../affiliates/entities/affiliate.entity';
 import {
+  CommissionHierarchyNode,
   CommissionHierarchyResponse,
   CommissionsByLevelResponse,
   CommissionStatsResponse,
@@ -58,36 +59,8 @@ class CommissionsByLevelResponseDto implements CommissionsByLevelResponse {
 }
 
 class CommissionHierarchyResponseDto implements CommissionHierarchyResponse {
-  current: {
-    id: string;
-    name: string;
-    totalEarned: number;
-    level: number;
-  };
-  level1?: {
-    id: string;
-    name: string;
-    email?: string;
-    commissionPercentage: number;
-    totalEarnedFromYou: number;
-    totalCommissionsFromYou: number;
-  };
-  level2?: {
-    id: string;
-    name: string;
-    email?: string;
-    commissionPercentage: number;
-    totalEarnedFromYou: number;
-    totalCommissionsFromYou: number;
-  };
-  level3?: {
-    id: string;
-    name: string;
-    email?: string;
-    commissionPercentage: number;
-    totalEarnedFromYou: number;
-    totalCommissionsFromYou: number;
-  };
+  current: CommissionHierarchyNode;
+  uplines: CommissionHierarchyNode[];
 }
 
 @ApiTags('commissions')
@@ -374,8 +347,7 @@ export class CommissionsService {
   async getCommissionHierarchy(
     affiliateId: string,
   ): Promise<CommissionHierarchyResponse> {
-    // Obtener el afiliado actual con sus relaciones
-    const currentAffiliate = await this.affiliateRepo.findOne({
+    const affiliate = await this.affiliateRepo.findOne({
       where: { id: affiliateId },
       relations: [
         'user',
@@ -388,27 +360,16 @@ export class CommissionsService {
       ],
     });
 
-    if (!currentAffiliate) {
+    if (!affiliate) {
       throw new NotFoundException(`Affiliate with ID ${affiliateId} not found`);
     }
 
-    const result: CommissionHierarchyResponse = {
-      current: {
-        id: currentAffiliate.id,
-        name: currentAffiliate.user.name,
-        totalEarned: Number(currentAffiliate.totalEarned) || 0,
-        level: currentAffiliate.level,
-      },
-    };
-
-    // Configuración de porcentajes por nivel
-    const commissionPercentages = {
+    const commissionPercentages: Record<number, number> = {
       1: 10,
       2: 5,
       3: 2.5,
     };
 
-    // Función para calcular comisiones ganadas desde este afiliado
     const calculateCommissionsFromAffiliate = async (
       targetAffiliateId: string,
       sourceAffiliateId: string,
@@ -416,9 +377,7 @@ export class CommissionsService {
       const commissions = await this.commissionRepo.find({
         where: {
           affiliateId: targetAffiliateId,
-          sale: {
-            affiliateId: sourceAffiliateId,
-          },
+          sale: { affiliateId: sourceAffiliateId },
         },
         relations: ['sale'],
       });
@@ -429,65 +388,43 @@ export class CommissionsService {
       };
     };
 
-    // Nivel 1: Parent directo
-    if (currentAffiliate.parent) {
-      const commissionsFromYou = await calculateCommissionsFromAffiliate(
-        currentAffiliate.parent.id,
-        currentAffiliate.id,
+    const response: CommissionHierarchyResponse = {
+      current: {
+        id: affiliate.id,
+        name: affiliate.user.name,
+        email: affiliate.user.email,
+        level: affiliate.level,
+        parentId: affiliate.parentId,
+        totalEarned: Number(affiliate.totalEarned) || 0,
+      },
+      uplines: [],
+    };
+
+    let currentParent = affiliate.parent;
+    let distance = 1;
+
+    while (currentParent && distance <= 3) {
+      const commissions = await calculateCommissionsFromAffiliate(
+        currentParent.id,
+        affiliate.id,
       );
 
-      result.level1 = {
-        id: currentAffiliate.parent.id,
-        name: currentAffiliate.parent.user?.name || 'Unknown',
-        email: currentAffiliate.parent.user?.email,
-        commissionPercentage: commissionPercentages[1],
-        totalEarnedFromYou: commissionsFromYou.totalAmount,
-        totalCommissionsFromYou: commissionsFromYou.count,
-      };
+      response.uplines.push({
+        id: currentParent.id,
+        name: currentParent.user?.name || 'Unknown',
+        email: currentParent.user?.email,
+        level: currentParent.level,
+        parentId: currentParent.parentId,
+        commissionPercentage: commissionPercentages[distance],
+        totalEarnedFromYou: commissions.totalAmount,
+        totalCommissionsFromYou: commissions.count,
+      });
 
-      // Nivel 2: Grandparent
-      if (currentAffiliate.parent.parent) {
-        const commissionsFromYou = await calculateCommissionsFromAffiliate(
-          currentAffiliate.parent.parent.id,
-          currentAffiliate.id,
-        );
-
-        result.level2 = {
-          id: currentAffiliate.parent.parent.id,
-          name: currentAffiliate.parent.parent.user?.name || 'Unknown',
-          email: currentAffiliate.parent.parent.user?.email,
-          commissionPercentage: commissionPercentages[2],
-          totalEarnedFromYou: commissionsFromYou.totalAmount,
-          totalCommissionsFromYou: commissionsFromYou.count,
-        };
-
-        // Nivel 3: Great-grandparent
-        if (currentAffiliate.parent.parent.parent) {
-          const level3Affiliate = await this.affiliateRepo.findOne({
-            where: { id: currentAffiliate.parent.parent.parent.id },
-            relations: ['user'],
-          });
-
-          if (level3Affiliate) {
-            const commissionsFromYou = await calculateCommissionsFromAffiliate(
-              level3Affiliate.id,
-              currentAffiliate.id,
-            );
-
-            result.level3 = {
-              id: level3Affiliate.id,
-              name: level3Affiliate.user?.name || 'Unknown',
-              email: level3Affiliate.user?.email,
-              commissionPercentage: commissionPercentages[3],
-              totalEarnedFromYou: commissionsFromYou.totalAmount,
-              totalCommissionsFromYou: commissionsFromYou.count,
-            };
-          }
-        }
-      }
+      currentParent = currentParent.parent;
+      distance++;
     }
 
-    return result;
+    return response;
   }
 
   @ApiOperation({ summary: 'Get all commissions' })
