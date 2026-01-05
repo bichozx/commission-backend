@@ -21,9 +21,6 @@ export class AffiliatesService {
     private affiliateRepo: Repository<Affiliate>,
   ) {}
 
-  /** ----------------------------------------------
-   * GET HIERARCHY (upline + downline + totals)
-   * ---------------------------------------------- */
   async getHierarchy(affiliateId: string): Promise<AffiliateHierarchyResponse> {
     const currentAffiliate = await this.affiliateRepo.findOne({
       where: { id: affiliateId },
@@ -179,6 +176,7 @@ export class AffiliatesService {
     maxDepth: number = 5,
     depth: number = 0,
   ): AffiliateTreeNode {
+    // Si no hay affiliate o se alcanza la profundidad máxima, devuelve un nodo vacío
     if (!affiliate || depth >= maxDepth) {
       return {
         id: 'unknown',
@@ -187,7 +185,7 @@ export class AffiliatesService {
         level: 0,
         totalEarned: 0,
         status: '',
-        parentId: null,
+        parentId: undefined,
         children: [],
       };
     }
@@ -198,8 +196,8 @@ export class AffiliatesService {
       email: affiliate.user?.email || '',
       level: affiliate.level,
       totalEarned: Number(affiliate.totalEarned) || 0,
-      status: affiliate.status || null,
-      parentId: affiliate.parentId || null,
+      status: affiliate.status || '',
+      parentId: affiliate.parentId || undefined,
       children:
         affiliate.children?.map((child) =>
           this.buildTreeOptimized(child, maxDepth, depth + 1),
@@ -209,9 +207,6 @@ export class AffiliatesService {
     return node;
   }
 
-  /** ----------------------------------------------
-   * CREATE / UPDATE AFFILIATES
-   * ---------------------------------------------- */
   async createAffiliate(userId: string, parentId?: string): Promise<Affiliate> {
     let level = AffiliateLevel.LEVEL_1;
 
