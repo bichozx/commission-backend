@@ -35,6 +35,12 @@ export class AffiliatesController {
   }
 
   @Get('tree/:id')
+  @ApiOperation({ summary: 'Get complete affiliate tree for frontend' })
+  @ApiResponse({
+    status: 200,
+    description: 'Affiliate tree',
+    type: AffiliateTreeNode,
+  })
   async getCompleteTree(
     @Param('id') affiliateId: string,
   ): Promise<AffiliateTreeNode> {
