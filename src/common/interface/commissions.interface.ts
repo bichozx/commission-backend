@@ -1,4 +1,3 @@
-// src/commissions/interfaces/commissions.interface.ts
 export interface LevelStats {
   count: number;
   totalAmount: number;
@@ -28,7 +27,6 @@ export interface CommissionStatsResponse {
   };
 }
 
-// src/commissions/interfaces/commission-hierarchy.interface.ts
 export interface HierarchyLevelInfo {
   id: string;
   name: string;
@@ -38,18 +36,6 @@ export interface HierarchyLevelInfo {
   totalCommissionsFromYou: number;
 }
 
-// export interface CommissionHierarchyResponse {
-//   current: {
-//     id: string;
-//     name: string;
-//     totalEarned: number;
-//     level: number;
-//   };
-//   level1?: HierarchyLevelInfo;
-//   level2?: HierarchyLevelInfo;
-//   level3?: HierarchyLevelInfo;
-// }
-
 export interface CommissionHierarchyNode {
   id: string;
   name: string;
@@ -58,10 +44,8 @@ export interface CommissionHierarchyNode {
   level: number; // ✅ REAL desde BD
   parentId: string | null;
 
-  // Solo current
   totalEarned?: number;
 
-  // Solo uplines
   commissionPercentage?: number;
   totalEarnedFromYou?: number;
   totalCommissionsFromYou?: number;

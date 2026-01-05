@@ -1,12 +1,11 @@
-// import { Injectable } from '@nestjs/common';
-
-// @Injectable()
-// export class AffiliatesService {}
-
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Affiliate } from './entities/affiliate.entity';
+import {
+  Affiliate,
+  AffiliateLevel,
+  AffiliateStatus,
+} from './entities/affiliate.entity';
 import {
   AffiliateBasicInfo,
   AffiliateHierarchyResponse,
@@ -22,8 +21,10 @@ export class AffiliatesService {
     private affiliateRepo: Repository<Affiliate>,
   ) {}
 
+  /** ----------------------------------------------
+   * GET HIERARCHY (upline + downline + totals)
+   * ---------------------------------------------- */
   async getHierarchy(affiliateId: string): Promise<AffiliateHierarchyResponse> {
-    // Load current affiliate with all necessary relations
     const currentAffiliate = await this.affiliateRepo.findOne({
       where: { id: affiliateId },
       relations: [
@@ -43,14 +44,13 @@ export class AffiliatesService {
       throw new NotFoundException(`Affiliate with ID ${affiliateId} not found`);
     }
 
-    // Build response object
     const response: AffiliateHierarchyResponse = {
       current: this.mapToBasicInfo(currentAffiliate),
       directDownline: [],
       totalDownlineCount: 0,
     };
 
-    // Upline levels (Level 1, 2, 3)
+    // Upline
     if (currentAffiliate.parent) {
       response.level1 = this.mapToHierarchyLevelInfo(
         currentAffiliate.parent,
@@ -68,7 +68,6 @@ export class AffiliatesService {
             where: { id: currentAffiliate.parent.parent.parent.id },
             relations: ['user'],
           });
-
           if (level3Affiliate) {
             response.level3 = this.mapToHierarchyLevelInfo(
               level3Affiliate,
@@ -79,14 +78,13 @@ export class AffiliatesService {
       }
     }
 
-    // Downline (affiliates you referred directly)
-    if (currentAffiliate.children && currentAffiliate.children.length > 0) {
+    // Downline
+    if (currentAffiliate.children?.length > 0) {
       response.directDownline = currentAffiliate.children.map((child) =>
         this.mapToDownlineInfo(child),
       );
     }
 
-    // Calculate total downline count (direct + indirect)
     response.totalDownlineCount =
       await this.calculateTotalDownlineCount(affiliateId);
 
@@ -97,7 +95,7 @@ export class AffiliatesService {
     return {
       id: affiliate.id,
       name: affiliate.user?.name || 'Unknown',
-      email: affiliate.user?.email || '',
+      email: affiliate.user?.email || 'Unknown',
       level: affiliate.level,
       joinDate: affiliate.createdAt,
       totalEarned: Number(affiliate.totalEarned) || 0,
@@ -113,7 +111,7 @@ export class AffiliatesService {
     return {
       id: affiliate.id,
       name: affiliate.user?.name || 'Unknown',
-      email: affiliate.user?.email || '',
+      email: affiliate.user?.email || 'Unknown',
       commissionPercentage,
       joinDate: affiliate.createdAt,
       totalEarned: Number(affiliate.totalEarned) || 0,
@@ -124,7 +122,7 @@ export class AffiliatesService {
     return {
       id: affiliate.id,
       name: affiliate.user?.name || 'Unknown',
-      email: affiliate.user?.email || '',
+      email: affiliate.user?.email || 'Unknown',
       level: affiliate.level,
       joinDate: affiliate.createdAt,
       totalEarned: Number(affiliate.totalEarned) || 0,
@@ -134,20 +132,16 @@ export class AffiliatesService {
   private async calculateTotalDownlineCount(
     affiliateId: string,
   ): Promise<number> {
-    // This is a recursive function to count all downline affiliates
     const countDownline = async (id: string): Promise<number> => {
       const affiliate = await this.affiliateRepo.findOne({
         where: { id },
         relations: ['children'],
       });
 
-      if (!affiliate || !affiliate.children) {
-        return 0;
-      }
+      if (!affiliate || !affiliate.children) return 0;
 
       let count = affiliate.children.length;
 
-      // Recursively count children's children
       for (const child of affiliate.children) {
         count += await countDownline(child.id);
       }
@@ -158,97 +152,149 @@ export class AffiliatesService {
     return await countDownline(affiliateId);
   }
 
-  // Optional: Get complete tree structure
-  // async getCompleteTree(affiliateId: string): Promise<any> {
-  //   const buildTree = async (
-  //     id: string,
-  //     depth: number = 0,
-  //     maxDepth: number = 5,
-  //   ): Promise<any> => {
-  //     if (depth >= maxDepth) return null;
-
-  //     const affiliate = await this.affiliateRepo.findOne({
-  //       where: { id },
-  //       relations: ['user', 'children', 'children.user'],
-  //     });
-
-  //     if (!affiliate) return null;
-
-  //     const node = {
-  //       id: affiliate.id,
-  //       name: affiliate.user?.name || 'Unknown',
-  //       level: affiliate.level,
-  //       totalEarned: Number(affiliate.totalEarned) || 0,
-  //       children: [] as any[],
-  //     };
-
-  //     if (affiliate.children && affiliate.children.length > 0) {
-  //       for (const child of affiliate.children) {
-  //         const childTree = await buildTree(child.id, depth + 1, maxDepth);
-  //         if (childTree) {
-  //           node.children.push(childTree);
-  //         }
-  //       }
-  //     }
-
-  //     return node;
-  //   };
-
-  //   return await buildTree(affiliateId);
-  // }
-
-  //probando
+  /** ----------------------------------------------
+   * TREE (optimized for frontend)
+   * ---------------------------------------------- */
   async getCompleteTree(affiliateId: string): Promise<AffiliateTreeNode> {
-    return await this.buildTree(affiliateId);
-  }
-
-  private async buildTree(
-    affiliateId: string,
-    depth: number = 0,
-    maxDepth: number = 5,
-  ): Promise<AffiliateTreeNode> {
-    if (depth >= maxDepth) {
-      return {
-        id: affiliateId,
-        name: 'Depth Limit Reached',
-        level: 0,
-        totalEarned: 0,
-        children: [],
-      };
-    }
-
     const affiliate = await this.affiliateRepo.findOne({
       where: { id: affiliateId },
-      relations: ['user', 'children', 'children.user'],
+      relations: [
+        'user',
+        'children',
+        'children.user',
+        'children.children',
+        'children.children.user',
+        'children.children.children',
+        'children.children.children.user',
+      ],
     });
 
-    if (!affiliate) {
-      throw new NotFoundException(`Affiliate with ID ${affiliateId} not found`);
+    if (!affiliate) throw new NotFoundException('Affiliate not found');
+
+    return this.buildTreeOptimized(affiliate);
+  }
+
+  private buildTreeOptimized(
+    affiliate: Affiliate,
+    maxDepth: number = 5,
+    depth: number = 0,
+  ): AffiliateTreeNode {
+    if (!affiliate || depth >= maxDepth) {
+      return {
+        id: 'unknown',
+        name: 'Depth limit reached',
+        email: '',
+        level: 0,
+        totalEarned: 0,
+        status: '',
+        parentId: null,
+        children: [],
+      };
     }
 
     const node: AffiliateTreeNode = {
       id: affiliate.id,
       name: affiliate.user?.name || 'Unknown',
+      email: affiliate.user?.email || '',
       level: affiliate.level,
       totalEarned: Number(affiliate.totalEarned) || 0,
-      children: [],
+      status: affiliate.status || null,
+      parentId: affiliate.parentId || null,
+      children:
+        affiliate.children?.map((child) =>
+          this.buildTreeOptimized(child, maxDepth, depth + 1),
+        ) || [],
     };
 
-    if (affiliate.children && affiliate.children.length > 0) {
-      for (const child of affiliate.children) {
-        try {
-          const childTree = await this.buildTree(child.id, depth + 1, maxDepth);
-          node.children.push(childTree);
-        } catch (error) {
-          // Skip if child not found
-          console.warn(
-            `Child affiliate ${child.id} not found, skipping`,
-            error,
-          );
-        }
+    return node;
+  }
+
+  /** ----------------------------------------------
+   * CREATE / UPDATE AFFILIATES
+   * ---------------------------------------------- */
+  async createAffiliate(userId: string, parentId?: string): Promise<Affiliate> {
+    let level = AffiliateLevel.LEVEL_1;
+
+    let parent: Affiliate | null = null;
+    if (parentId) {
+      parent = await this.affiliateRepo.findOne({ where: { id: parentId } });
+      if (!parent) throw new Error('Parent not found');
+
+      switch (parent.level) {
+        case AffiliateLevel.LEVEL_1:
+          level = AffiliateLevel.LEVEL_2;
+          break;
+        case AffiliateLevel.LEVEL_2:
+          level = AffiliateLevel.LEVEL_3;
+          break;
+        default:
+          level = AffiliateLevel.LEVEL_3;
       }
     }
 
-    return node;
+    const commissionRate = this.getCommissionRate(level);
+
+    const affiliate = this.affiliateRepo.create({
+      userId,
+      parent,
+      parentId: parent?.id ?? null,
+      level,
+      commissionRate,
+    });
+
+    return this.affiliateRepo.save(affiliate);
+  }
+
+  async updateAffiliate(
+    affiliateId: string,
+    data: Partial<{
+      level: AffiliateLevel;
+      commissionRate: number;
+      status: string;
+    }>,
+  ): Promise<Affiliate> {
+    const affiliate = await this.affiliateRepo.findOne({
+      where: { id: affiliateId },
+    });
+    if (!affiliate) throw new NotFoundException('Affiliate not found');
+
+    if (data.level !== undefined) affiliate.level = data.level;
+    if (data.commissionRate !== undefined)
+      affiliate.commissionRate = data.commissionRate;
+    if (data.status !== undefined)
+      affiliate.status = data.status as AffiliateStatus;
+
+    return this.affiliateRepo.save(affiliate);
+  }
+
+  /** ----------------------------------------------
+   * LIST AFFILIATES BY LEVEL
+   * ---------------------------------------------- */
+  async getAffiliatesByLevel(level?: AffiliateLevel): Promise<Affiliate[]> {
+    const query = this.affiliateRepo
+      .createQueryBuilder('affiliate')
+      .leftJoinAndSelect('affiliate.user', 'user');
+
+    if (level !== undefined) {
+      query.where('affiliate.level = :level', { level });
+    }
+
+    return query.getMany();
+  }
+
+  /** ----------------------------------------------
+   * HELPERS
+   * ---------------------------------------------- */
+  private getCommissionRate(level: AffiliateLevel): number {
+    switch (level) {
+      case AffiliateLevel.LEVEL_1:
+        return 10;
+      case AffiliateLevel.LEVEL_2:
+        return 5;
+      case AffiliateLevel.LEVEL_3:
+        return 2.5;
+      default:
+        return 0;
+    }
   }
 }

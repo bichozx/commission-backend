@@ -35,7 +35,11 @@ export class Affiliate {
   @JoinColumn({ name: 'userId' })
   user: User;
 
-  @Column({ type: 'int' })
+  @Column({
+    type: 'enum',
+    enum: AffiliateLevel,
+    default: AffiliateLevel.LEVEL_1,
+  })
   level: AffiliateLevel;
 
   @Column({ type: 'uuid', nullable: true })

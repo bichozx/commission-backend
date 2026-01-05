@@ -1,112 +1,72 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Sale } from './entities/sale.entity';
+
+import { Affiliate } from '../affiliates/entities/affiliate.entity';
+
 import { CreateSaleDto } from './dto/create-sale.dto';
-import { CommissionsService } from '../commissions/commissions.service';
+import { Sale } from './entities/sale.entity';
 
 @Injectable()
 export class SalesService {
   constructor(
+    @InjectRepository(Affiliate)
+    private affiliateRepo: Repository<Affiliate>,
+
     @InjectRepository(Sale)
     private saleRepo: Repository<Sale>,
-    private commissionsService: CommissionsService,
   ) {}
 
-  // async create(
-  //   createSaleDto: CreateSaleDto,
-  //   affiliateId: string,
-  // ): Promise<{
-  //   sale: Sale;
-  //   commissions: any[]; // O crea una interfaz CommissionResponse
-  //   message: string;
-  // }> {
-  //   // Crear la venta
-  //   const sale = this.saleRepo.create({
-  //     ...createSaleDto,
-  //     affiliateId,
-  //   });
+  async registerSale(dto: CreateSaleDto) {
+    const { affiliateId, amount, description } = dto;
 
-  //   const savedSale = await this.saleRepo.save(sale);
+    // 1️⃣ Buscar afiliado
+    const affiliate = await this.affiliateRepo.findOne({
+      where: { id: affiliateId },
+      relations: ['parent', 'parent.parent', 'parent.parent.parent'], // hasta 3 niveles
+    });
+    if (!affiliate) throw new NotFoundException('Affiliate not found');
 
-  //   // Calcular comisiones automáticamente
-  //   const commissions =
-  //     await this.commissionsService.calculateCommissionsForSale(savedSale.id);
-
-  //   return {
-  //     sale: savedSale,
-  //     commissions,
-  //     message: `Sale created successfully. ${commissions.length} commission(s) calculated with percentages: ${commissions
-  //       .map((c) => `Level ${c.level} (${c.percentage}%)`)
-  //       .join(', ')}`,
-  //   };
-  // }
-
-  async create(
-    createSaleDto: CreateSaleDto,
-    requestingAffiliateId: string, // Renombrar para claridad
-  ): Promise<{
-    sale: Sale;
-    commissions: any[];
-    message: string;
-  }> {
-    // IMPORTANTE: ¿Quién hace la venta?
-    // Opción A: El afiliado autenticado (requestingAffiliateId)
-    // Opción B: Un afiliado específico (si el admin puede crear ventas para otros)
-
-    // Para MVP, asumimos que el afiliado autenticado hace la venta
+    // 2️⃣ Guardar venta usando Sale
     const sale = this.saleRepo.create({
-      amount: createSaleDto.amount,
-      description: createSaleDto.description,
-      affiliateId: requestingAffiliateId, // Usar el afiliado autenticado
+      affiliateId,
+      affiliate,
+      amount,
+      description: description ?? undefined,
+      saleDate: new Date(),
     });
+    await this.saleRepo.save(sale);
 
-    const savedSale = await this.saleRepo.save(sale);
-
-    // Calcular comisiones
-    const commissions =
-      await this.commissionsService.calculateCommissionsForSale(savedSale.id);
+    // 3️⃣ Distribuir comisiones a los padres
+    await this.distributeCommission(affiliate, amount);
 
     return {
-      sale: savedSale,
-      commissions,
-      message: `✅ Sale created successfully. ${commissions.length} commission(s) calculated with percentages: ${commissions
-        .map((c) => `Level ${c.level} (${c.percentage}%)`)
-        .join(', ')}`,
+      message: 'Sale registered and commissions distributed successfully',
+      sale,
     };
   }
 
-  async findAllByAffiliate(affiliateId: string): Promise<Sale[]> {
-    return this.saleRepo.find({
-      where: { affiliateId },
-      order: { createdAt: 'DESC' },
-    });
-  }
+  private async distributeCommission(
+    affiliate: Affiliate,
+    amount: number,
+    maxLevels = 3,
+    currentLevel = 1,
+  ) {
+    if (!affiliate.parent || currentLevel > maxLevels) return;
 
-  async findOneWithCommissions(id: string) {
-    const sale = await this.saleRepo.findOne({
-      where: { id },
-      relations: ['affiliate', 'affiliate.user'],
-    });
+    const parent = affiliate.parent;
+    const commission = (amount * Number(parent.commissionRate)) / 100;
 
-    if (!sale) {
-      throw new NotFoundException(`Sale with ID ${id} not found`);
+    parent.totalEarned = Number(parent.totalEarned) + commission;
+    await this.affiliateRepo.save(parent);
+
+    if (parent.parent) {
+      await this.distributeCommission(
+        parent,
+        amount,
+        maxLevels,
+        currentLevel + 1,
+      );
     }
-
-    return sale;
-  }
-
-  async getStats(affiliateId: string) {
-    const sales = await this.findAllByAffiliate(affiliateId);
-
-    return {
-      totalSales: sales.length,
-      totalRevenue: sales.reduce((sum, sale) => sum + Number(sale.amount), 0),
-      avgSaleAmount:
-        sales.length > 0
-          ? sales.reduce((sum, sale) => sum + Number(sale.amount), 0) /
-            sales.length
-          : 0,
-    };
   }
 }
