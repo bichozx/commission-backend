@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -207,37 +211,78 @@ export class AffiliatesService {
     return node;
   }
 
+  // async createAffiliate(userId: string, parentId?: string): Promise<Affiliate> {
+  //   let level = AffiliateLevel.LEVEL_1;
+  //   let parent: Affiliate | null = null;
+
+  //   if (parentId) {
+  //     parent = await this.affiliateRepo.findOne({
+  //       where: { id: parentId },
+  //     });
+
+  //     if (!parent) {
+  //       throw new NotFoundException('Parent not found');
+  //     }
+
+  //     switch (parent.level) {
+  //       case AffiliateLevel.LEVEL_1:
+  //         level = AffiliateLevel.LEVEL_2;
+  //         break;
+  //       case AffiliateLevel.LEVEL_2:
+  //         level = AffiliateLevel.LEVEL_3;
+  //         break;
+  //       default:
+  //         level = AffiliateLevel.LEVEL_3;
+  //     }
+  //   }
+
+  //   const affiliate: Affiliate = this.affiliateRepo.create({
+  //     userId, // ✅ AHORA ES VÁLIDO
+  //     parentId: parent?.id ?? null,
+  //     parent,
+  //     level,
+  //     commissionRate: this.getCommissionRate(level),
+  //     status: AffiliateStatus.ACTIVE, // ✅ ENUM
+  //     totalEarned: 0,
+  //   });
+
+  //   return this.affiliateRepo.save(affiliate);
+  // }
   async createAffiliate(userId: string, parentId?: string): Promise<Affiliate> {
     let level = AffiliateLevel.LEVEL_1;
-
     let parent: Affiliate | null = null;
-    if (parentId) {
-      parent = await this.affiliateRepo.findOne({ where: { id: parentId } });
-      if (!parent) throw new Error('Parent not found');
 
-      switch (parent.level) {
-        case AffiliateLevel.LEVEL_1:
-          level = AffiliateLevel.LEVEL_2;
-          break;
-        case AffiliateLevel.LEVEL_2:
-          level = AffiliateLevel.LEVEL_3;
-          break;
-        default:
-          level = AffiliateLevel.LEVEL_3;
+    if (parentId) {
+      parent = await this.affiliateRepo.findOne({
+        where: { id: parentId },
+      });
+
+      if (!parent) {
+        throw new NotFoundException('Parent not found');
       }
+
+      if (parent.level === AffiliateLevel.LEVEL_3) {
+        throw new BadRequestException(
+          'Level 3 affiliates cannot refer new users',
+        );
+      }
+
+      level =
+        parent.level === AffiliateLevel.LEVEL_1
+          ? AffiliateLevel.LEVEL_2
+          : AffiliateLevel.LEVEL_3;
     }
 
-    const commissionRate = this.getCommissionRate(level);
-
-    const affiliate = this.affiliateRepo.create({
-      userId,
-      parent,
-      parentId: parent?.id ?? null,
-      level,
-      commissionRate,
-    });
-
-    return this.affiliateRepo.save(affiliate);
+    return this.affiliateRepo.save(
+      this.affiliateRepo.create({
+        userId,
+        parentId: parent?.id ?? null,
+        parent,
+        level,
+        commissionRate: this.getCommissionRate(level),
+        status: AffiliateStatus.ACTIVE,
+      }),
+    );
   }
 
   async updateAffiliate(
@@ -291,5 +336,11 @@ export class AffiliatesService {
       default:
         return 0;
     }
+  }
+
+  async findById(id: string): Promise<Affiliate | null> {
+    return this.affiliateRepo.findOne({
+      where: { id },
+    });
   }
 }

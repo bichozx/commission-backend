@@ -2,27 +2,36 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+
 import { User, UserRole } from '../users/entities/user.entity';
 import {
   Affiliate,
+  AffiliateLevel,
   AffiliateStatus,
 } from '../affiliates/entities/affiliate.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { RegisterAffiliateDto } from './dto/registerAffiliateDto';
+import { AffiliatesService } from '../affiliates/affiliates.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectRepository(User)
-    private userRepo: Repository<User>,
+    private readonly userRepo: Repository<User>,
+
     @InjectRepository(Affiliate)
-    private affiliateRepo: Repository<Affiliate>,
-    private jwtService: JwtService,
+    private readonly affiliateRepo: Repository<Affiliate>,
+
+    private readonly jwtService: JwtService,
+    private readonly affiliatesService: AffiliatesService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -158,5 +167,28 @@ export class AuthService {
     };
 
     return this.jwtService.sign(payload);
+  }
+
+  async registerAffiliate(
+    dto: RegisterAffiliateDto,
+    parentAffiliateId: string,
+  ) {
+    const parent = await this.affiliatesService.findById(parentAffiliateId);
+
+    if (!parent) {
+      throw new NotFoundException('Parent affiliate not found');
+    }
+
+    if (parent.level >= AffiliateLevel.LEVEL_3) {
+      throw new ForbiddenException(
+        'Level 3 affiliates cannot register new affiliates',
+      );
+    }
+
+    // 🔹 Reutilizamos el flujo de register
+    return this.register({
+      ...dto,
+      parentAffiliateId,
+    });
   }
 }
