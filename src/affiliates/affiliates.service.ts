@@ -153,9 +153,6 @@ export class AffiliatesService {
     return await countDownline(affiliateId);
   }
 
-  /** ----------------------------------------------
-   * TREE (optimized for frontend)
-   * ---------------------------------------------- */
   async getCompleteTree(affiliateId: string): Promise<AffiliateTreeNode> {
     const affiliate = await this.affiliateRepo.findOne({
       where: { id: affiliateId },
@@ -211,43 +208,6 @@ export class AffiliatesService {
     return node;
   }
 
-  // async createAffiliate(userId: string, parentId?: string): Promise<Affiliate> {
-  //   let level = AffiliateLevel.LEVEL_1;
-  //   let parent: Affiliate | null = null;
-
-  //   if (parentId) {
-  //     parent = await this.affiliateRepo.findOne({
-  //       where: { id: parentId },
-  //     });
-
-  //     if (!parent) {
-  //       throw new NotFoundException('Parent not found');
-  //     }
-
-  //     switch (parent.level) {
-  //       case AffiliateLevel.LEVEL_1:
-  //         level = AffiliateLevel.LEVEL_2;
-  //         break;
-  //       case AffiliateLevel.LEVEL_2:
-  //         level = AffiliateLevel.LEVEL_3;
-  //         break;
-  //       default:
-  //         level = AffiliateLevel.LEVEL_3;
-  //     }
-  //   }
-
-  //   const affiliate: Affiliate = this.affiliateRepo.create({
-  //     userId, // ✅ AHORA ES VÁLIDO
-  //     parentId: parent?.id ?? null,
-  //     parent,
-  //     level,
-  //     commissionRate: this.getCommissionRate(level),
-  //     status: AffiliateStatus.ACTIVE, // ✅ ENUM
-  //     totalEarned: 0,
-  //   });
-
-  //   return this.affiliateRepo.save(affiliate);
-  // }
   async createAffiliate(userId: string, parentId?: string): Promise<Affiliate> {
     let level = AffiliateLevel.LEVEL_1;
     let parent: Affiliate | null = null;
@@ -307,9 +267,6 @@ export class AffiliatesService {
     return this.affiliateRepo.save(affiliate);
   }
 
-  /** ----------------------------------------------
-   * LIST AFFILIATES BY LEVEL
-   * ---------------------------------------------- */
   async getAffiliatesByLevel(level?: AffiliateLevel): Promise<Affiliate[]> {
     const query = this.affiliateRepo
       .createQueryBuilder('affiliate')
@@ -322,9 +279,6 @@ export class AffiliatesService {
     return query.getMany();
   }
 
-  /** ----------------------------------------------
-   * HELPERS
-   * ---------------------------------------------- */
   private getCommissionRate(level: AffiliateLevel): number {
     switch (level) {
       case AffiliateLevel.LEVEL_1:
